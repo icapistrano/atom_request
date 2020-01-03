@@ -22,8 +22,7 @@ class User:
             return img_format
 
         else:
-            print("Invalid image formatting. Must be 'png' or 'jpeg'")
-            exit()  # automatically stop program
+            raise ValueError(img_format)
 
     def image_resolution(self):
         # GET IMAGE RESOLUTION INTO TUPLE #index error, value error
@@ -33,8 +32,26 @@ class User:
         res = [width, height]
         return tuple(res)
 
+    def options(self, PIL_obj, entry):
+        while True:
+            option = input("Select option for image {}: 1 (to view image[s]), 2 (save image[s]), 3 (move on)".format(entry))
+            if int(option) == 1:
+                print("Showing image")
+                PIL_obj.show()
 
-def get_cache(img_format, img_res, client):
+            elif int(option) == 2:
+                print("Saving to current directory...")
+                image_filename = input("Save file as: ")
+                PIL_obj.save(image_filename + ".{}".format(PIL_obj.format))
+
+            elif int(option) == 3:
+                break
+
+            else:
+                print("{} not expected. Try again".format(option))
+
+
+def get_cache(img_format, img_res, client, user):
     # HASHES, NO DUPLICATES
 
     entries = client.keys('*') # gets all entries in cache
@@ -44,28 +61,32 @@ def get_cache(img_format, img_res, client):
         raise InputError("No images found in cache, checking image library")
 
     else:
+        start_time = time.time()
+        global processing_time
         for entry in entries:
             image = client.hgetall(entry)
             if image[b'format'].decode('utf-8') == img_format and image[b'resolution'].decode('utf-8') == str(img_res):
+                if processing_time:
+                    print("It took {} seconds to retrieve image[s] with matching parameters in cache".format(round(time.time() - start_time, 2)))
+                    processing_time=False
+
                 bin_image = image[b'binary']
                 bytes_data_io = BytesIO(bin_image) # wrap data into wrapper
                 img = Image.open(bytes_data_io)
-                img.show()
-                image_filename = input("Save file as: ")
-                print("Saving to current directory...")
-                img.save(image_filename + ".{}".format(img_format))
+                user.options(img, entry)
+
 
             else:
                 raise InputError("No images matched parameters in cache, checking image library") # throw exception to check db
 
-        flag_condition = True
-        return flag_condition
 
-def get_db(img_format, img_res, client):
+
+def get_db(img_format, img_res, client, user):
     url = 'https://www.masterofmalt.com/external_resources/dev_interview/product_images.zip'
-    flag_condition = False
 
+    start_time=time.time()
     r = requests.get(url, stream=True)
+    global processing_time
     if r: # returns true/false, response 200 is good
         z = zipfile.ZipFile(BytesIO(r.content)) # r.content is binary data
         images = z.namelist()
@@ -73,57 +94,49 @@ def get_db(img_format, img_res, client):
             if i.endswith(img_format):  # nested if, not valid to image read folder
                 image = Image.open(i) # PIL library for checking image dimension
                 if image.size == img_res:  # (788 x 1024)
-                    image.show()
-                    image_filename = input("Save file as: ")
-                    print("Saving to current directory...")
-                    image.save(image_filename+".{}".format(img_format))
+                    if processing_time:
+                        print("It took {} seconds to retrieve image[s] with matching parameters in image library".format(round(time.time() - start_time, 2)))
+                        processing_time = False
+
+                    user.options(image, i)
 
                     byte_image_io = BytesIO()
                     image.save(byte_image_io, "{}".format(img_format))
                     byte_image_io.seek(0)
                     image = byte_image_io.read()
 
-                    print("Sending to cache...")
-                    entry = {"image": "{}".format(image_filename), "format": "{}".format(img_format), "resolution": str(img_res), "binary": image}
-                    client.hmset(image_filename, entry)
-                    client.expire(image_filename, 180) # sets expiring time in seconds, 3 minutes
+                    print("Sending to cache for 5 minutes...")
+                    entry = {"image": "{}".format(i), "format": "{}".format(img_format), "resolution": str(img_res), "binary": image}
+                    client.hmset(i, entry)
+                    client.expire(i, 300) # sets expiring time in seconds, 5 minutes
 
-                    flag_condition = True
+            else:
+                print("No images found with matching parameters in image library")
     else:
         print("Invalid request to url")
-
-    return flag_condition
 
 
 def main():
     redis_client = redis.Redis(host='localhost', port=6379, db=0)  # initialize client
-    flag = False
+
     try:
         user = User()
         image_format = user.image_format()
         image_res = user.image_resolution()
-        # image_format = 'png'
-        # image_res = (788, 1025)
 
-        flag = get_cache(image_format,image_res,redis_client)
+        get_cache(image_format,image_res,redis_client, user)
 
     except IndexError:
-        print("Out of range, enter value like: 'x , y'")
+        print("Out of range, enter values in this format: 'x , y'")
 
-    except ValueError:
-        print("Not an integer, type correctly")
+    except ValueError as e:
+        print("{} not expected. Type correctly".format(e))
 
     except InputError as e:
         print(e.message)
-        flag = get_db(image_format, image_res, redis_client)
+        get_db(image_format, image_res, redis_client, user)
 
-    finally:
-        if flag:
-            print("Images have been saved in the current directory")
-        else:
-            print("No images have been found")
 
 if __name__ == '__main__':
-    start_time = time.time()
+    processing_time = True
     main()
-    print("Total time: {} seconds ".format(time.time()-start_time))
