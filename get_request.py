@@ -63,22 +63,22 @@ def get_cache(img_format, img_res, client, user):
     else:
         start_time = time.time()
         global processing_time
+        found_image = False
         for entry in entries:
             image = client.hgetall(entry)
             if image[b'format'].decode('utf-8') == img_format and image[b'resolution'].decode('utf-8') == str(img_res):
                 if processing_time:
                     print("It took {} seconds to retrieve image[s] with matching parameters in cache".format(round(time.time() - start_time, 2)))
                     processing_time=False
+                    found_image=True
 
                 bin_image = image[b'binary']
                 bytes_data_io = BytesIO(bin_image) # wrap data into wrapper
                 img = Image.open(bytes_data_io)
                 user.options(img, entry)
 
-
-            else:
-                raise InputError("No images matched parameters in cache, checking image library") # throw exception to check db
-
+        if found_image == False:
+            raise InputError("No images matched parameters in cache, checking image library") # throw exception to check db
 
 
 def get_db(img_format, img_res, client, user):
