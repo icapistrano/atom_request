@@ -32,9 +32,36 @@ class User:
         res = [width, height]
         return tuple(res)
 
+    def remove_duplicates(self, user_requests):
+        # HASHES, NO DUPLICATES
+        png = []
+        jpeg = []
+
+        for i in user_requests:
+            if i[0] == 'png':
+                png.append(i[1])
+
+            elif i[0] == 'jpeg':
+                jpeg.append(i[1])
+
+        user_requests.clear()
+
+        png_list = list(dict.fromkeys(png))
+        jpeg_list = list(dict.fromkeys(jpeg))
+
+        if len(png_list) > 0:
+            for png in png_list:
+                user_requests.append(['png', png])
+
+        if len(jpeg_list) > 0:
+            for jpeg in jpeg_list:
+                user_requests.append(['jpeg', jpeg])
+
+        return user_requests
+
     def options(self, PIL_obj, entry):
         while True:
-            option = input("Select option for image {}: 1 (to view image[s]), 2 (save image[s]), 3 (move on)".format(entry))
+            option = input("Select option for image {}: 1(to view image[s]), 2(save image[s]), 3(move on)".format(entry))
             if int(option) == 1:
                 print("Showing image")
                 PIL_obj.show()
@@ -148,9 +175,10 @@ def get_db(request_list, client, user):
 
 def main():
     redis_client = redis.Redis(host='localhost', port=6379, db=0)  # initialize client
-    image_requests = [['png',(1024,641)], ['png', (788, 1024)], ['pngg',(0,0)]] #['png', (1024, 641)]
+    image_requests = [['png',(1024,641)], ['png', (788, 1024)], ['png',(1024,641)]] #['png', (1024, 641)]
     # image_requests = []
     user = User()
+    image_requests = user.remove_duplicates(image_requests)
 
     try:
         # while True:
@@ -163,13 +191,14 @@ def main():
         #
         #     elif int(option) == 2:
         #         break
+
         for index, i in enumerate(image_requests):
             i.append(index)
 
         get_cache(image_requests, redis_client, user)
 
-    # except IndexError:
-    #     print("Out of range, enter values in this format: 'width_px , height_px'")
+    except IndexError:
+        print("Out of range, enter values in this format: 'width_px , height_px'")
 
     except ValueError as e:
         print("{} not expected. Type correctly".format(e))
