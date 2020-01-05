@@ -57,14 +57,8 @@ def get_cache(req, client, user):
     entries = client.keys('*') # gets all entries in cache
     print("Found {} images in cache".format(len(entries)))
 
-    ## image_requests = [['png', (788, 1024)], ['png', (1024, 641)]]
-
     if len(entries) == 0:
         print("No images found in cache, checking image library")
-
-        for index, r in enumerate(req):
-            r.append(index)
-
         get_db(req, client, user)
 
     else:
@@ -73,13 +67,13 @@ def get_cache(req, client, user):
         global found_image
         request_db= []
 
-        for index, r in enumerate(req):
+        for index, r in enumerate(req): # enumerate not needed
             for entry in entries:
                 image = client.hgetall(entry)
 
                 if image[b'format'].decode('utf-8') == r[0] and image[b'resolution'].decode('utf-8') == str(r[1]):
                     if processing_time: # execute block once
-                        print("It took {} seconds to retrieve image[s] that match request {} parameters in cache".format(round(time.time() - start_time, 3),index))
+                        print("It took {} seconds to retrieve image[s] that match request {} parameters in cache".format(round(time.time() - start_time, 3),r[2])) #r[2] == index
                         processing_time=False
                         found_image=True
 
@@ -89,9 +83,7 @@ def get_cache(req, client, user):
                     user.options(img, entry)
 
             if found_image == False:
-                r.append(index) # append request number
                 request_db.append(r) # for checking in image library
-                # print(request_db)
 
             processing_time = True # change to default to print every r iteration
             found_image = False
@@ -171,6 +163,8 @@ def main():
         #
         #     elif int(option) == 2:
         #         break
+        for index, i in enumerate(image_requests):
+            i.append(index)
 
         get_cache(image_requests, redis_client, user)
 
