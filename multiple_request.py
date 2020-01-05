@@ -57,8 +57,15 @@ def get_cache(req, client, user):
     entries = client.keys('*') # gets all entries in cache
     print("Found {} images in cache".format(len(entries)))
 
+    ## image_requests = [['png', (788, 1024)], ['png', (1024, 641)]]
+
     if len(entries) == 0:
-        raise InputError("No images found in cache, checking image library")
+        print("No images found in cache, checking image library")
+
+        for index, r in enumerate(req):
+            r.append(index)
+
+        get_db(req, client, user)
 
     else:
         start_time = time.time()
@@ -84,17 +91,17 @@ def get_cache(req, client, user):
             if found_image == False:
                 r.append(index) # append request number
                 request_db.append(r) # for checking in image library
-                print(request_db)
+                # print(request_db)
 
-            processing_time = True
+            processing_time = True # change to default to print every r iteration
             found_image = False
 
         if len(request_db) > 0:
             for i in request_db:
                 print("No images in cache matched request {} parameters".format(i[2]))
 
+            print("Checking image library..")
             get_db(request_db, client, user)
-
 
 
 def get_db(request_list, client, user):
@@ -106,6 +113,7 @@ def get_db(request_list, client, user):
     r = requests.get(url, stream=True, params=param)
     global processing_time
     global found_image
+    no_image = []
 
     if r: # returns true/false, response 200 is good
         z = zipfile.ZipFile(BytesIO(r.content)) # r.content is binary data
@@ -116,9 +124,9 @@ def get_db(request_list, client, user):
                     image = Image.open(i) # PIL library for checking image dimension
                     if image.size == r[1]:  # (788 x 1024)
                         if processing_time:
-                            print("It took {} seconds to retrieve image[s] with matching parameters in image library".format(round(time.time() - start_time, 3)))
+                            print("It took {} seconds to retrieve image[s] that match request {} in image library".format(round(time.time() - start_time, 3), r[2]))
                             processing_time = False
-                            # found_image = True
+                            found_image = True
 
                         user.options(image, i)
 
@@ -132,26 +140,34 @@ def get_db(request_list, client, user):
 
                         client.hmset(i, entry)
                         # client.expire(i, 300) # sets expiring time in seconds, 5 minutes
+
+            if found_image == False:
+                no_image.append(r) # for checking in image library
+
+            processing_time=True
+            found_image=False
     else:
         print("Invalid request to url")
 
-    # if found_image == False:
-    #     print("No images found with matching parameters in image library")
+    if len(no_image) > 0:
+        for i in no_image:
+            print("No images in image library matched request {} parameters".format(i[2]))
 
 
 def main():
     redis_client = redis.Redis(host='localhost', port=6379, db=0)  # initialize client
-    image_requests = [['png', (537,1024)],['png', (788, 1024)], ['png', (1024, 641)]]
+    image_requests = [['png',(1024,641)], ['png', (788, 1024)], ['pngg',(0,0)]] #['png', (1024, 641)]
+    # image_requests = []
     user = User()
 
     try:
         # while True:
         #     option = input("Select option: 1(request image), 2(move on)")
         #     if int(option) == 1:
-        #         # image_format = user.image_format()
-        #         # image_res = user.image_resolution()
-        #         # image_request = [image_format, image_res]
-        #         # image_requests.append(image_request)
+        #         image_format = user.image_format()
+        #         image_res = user.image_resolution()
+        #         image_request = [image_format, image_res]
+        #         image_requests.append(image_request)
         #
         #     elif int(option) == 2:
         #         break
@@ -164,9 +180,6 @@ def main():
     except ValueError as e:
         print("{} not expected. Type correctly".format(e))
 
-    # except InputError as e:
-    #     print(e.message)
-    #     get_db(image_format, image_res, redis_client, user)
 
 if __name__ == '__main__':
     processing_time = True
