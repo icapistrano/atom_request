@@ -5,10 +5,6 @@ import requests
 from PIL import Image
 from io import BytesIO
 
-class InputError(Exception):
-    def __init__(self, message):
-        # self.expression = expression
-        self.message = message
 
 class User:
     def __init__(self):
@@ -38,7 +34,7 @@ class User:
         jpeg = []
 
         for i in user_requests:
-            if i[0] == 'png':
+            if i[0] == 'png': # make lists of resolutions with same format, as list are unhashable
                 png.append(i[1])
 
             elif i[0] == 'jpeg':
@@ -61,7 +57,7 @@ class User:
 
     def options(self, PIL_obj, entry):
         while True:
-            option = input("Select option for image {}: 1(to view image[s]), 2(save image[s]), 3(move on)".format(entry))
+            option = input("Select option for image {}: 1(to view image[s]), 2(save image[s]), 3(move on)...".format(entry))
             if int(option) == 1:
                 print("Showing image")
                 PIL_obj.show()
@@ -85,7 +81,7 @@ def get_cache(req, client, user):
     print("Found {} images in cache".format(len(entries)))
 
     if len(entries) == 0:
-        print("No images found in cache, checking image library")
+        print("No images found in cache, checking image library...")
         get_db(req, client, user)
 
     else:
@@ -117,9 +113,9 @@ def get_cache(req, client, user):
 
         if len(request_db) > 0:
             for i in request_db:
-                print("No images in cache matched request {} parameters".format(i[2]))
+                print("No images in cache matched request {} parameters with format={} & resolution={}".format(i[2], i[0], i[1]))
 
-            print("Checking image library..")
+            print("Checking image library...")
             get_db(request_db, client, user)
 
 
@@ -135,30 +131,34 @@ def get_db(request_list, client, user):
     no_image = []
 
     if r: # returns true/false, response 200 is good
-        z = zipfile.ZipFile(BytesIO(r.content)) # r.content is binary data
-        images = z.namelist()
-        for r in request_list:
-            for i in images:
-                if i.endswith(r[0]):  # nested if, not valid to image read folder
-                    image = Image.open(i) # PIL library for checking image dimension
-                    if image.size == r[1]:  # (788 x 1024)
-                        if processing_time:
-                            print("It took {} seconds to retrieve image[s] that match request {} in image library".format(round(time.time() - start_time, 3), r[2]))
-                            processing_time = False
-                            found_image = True
+        with zipfile.ZipFile(BytesIO(r.content)) as z: # r.content is binary data
+            images = z.namelist()
 
-                        user.options(image, i)
+            for r in request_list:
+                for i in images:
+                    if i.endswith(r[0]):  # nested if, not valid to image read folder
 
-                        byte_image_io = BytesIO()
-                        image.save(byte_image_io, "{}".format(r[0]))
-                        byte_image_io.seek(0)
-                        image = byte_image_io.read()
+                        with z.open(i) as zip_mem:
+                            image = Image.open(BytesIO(zip_mem.read()))
 
-                        print("Sending to cache for 5 minutes...")
-                        entry = {"image": "{}".format(i), "format": "{}".format(r[0]), "resolution": str(r[1]), "binary": image}
+                            if image.size == r[1]:  # (788 x 1024)
+                                if processing_time:
+                                    print("It took {} seconds to retrieve image[s] that match request {} in image library".format(round(time.time() - start_time, 3), r[2]))
+                                    processing_time = False
+                                    found_image = True
 
-                        client.hmset(i, entry)
-                        # client.expire(i, 300) # sets expiring time in seconds, 5 minutes
+                                user.options(image, i)
+
+                                byte_image_io = BytesIO()
+                                image.save(byte_image_io, "{}".format(r[0]))
+                                byte_image_io.seek(0)
+                                image = byte_image_io.read()
+
+                                print("Sending to cache for 5 minutes...")
+                                entry = {"image": "{}".format(i), "format": "{}".format(r[0]), "resolution": str(r[1]), "binary": image}
+
+                                client.hmset(i, entry)
+                                client.expire(i, 300) # sets expiring time in seconds, 5 minutes
 
             if found_image == False:
                 no_image.append(r) # for checking in image library
@@ -170,27 +170,28 @@ def get_db(request_list, client, user):
 
     if len(no_image) > 0:
         for i in no_image:
-            print("No images in image library matched request {} parameters".format(i[2]))
+            print("No images in image library matched request {} parameters with format={} & resolution={}".format(i[2], i[0], i[1]))
 
 
 def main():
     redis_client = redis.Redis(host='localhost', port=6379, db=0)  # initialize client
-    image_requests = [['png',(1024,641)], ['png', (788, 1024)], ['png',(1024,641)]] #['png', (1024, 641)]
-    # image_requests = []
+    image_requests = []
     user = User()
-    image_requests = user.remove_duplicates(image_requests)
 
     try:
-        # while True:
-        #     option = input("Select option: 1(request image), 2(move on)")
-        #     if int(option) == 1:
-        #         image_format = user.image_format()
-        #         image_res = user.image_resolution()
-        #         image_request = [image_format, image_res]
-        #         image_requests.append(image_request)
-        #
-        #     elif int(option) == 2:
-        #         break
+        while True:
+            option = input("Select option: 1(request image), 2(move on)...")
+            if int(option) == 1:
+                image_format = user.image_format()
+                image_res = user.image_resolution()
+                image_request = [image_format, image_res]
+                image_requests.append(image_request)
+                print("")
+
+            elif int(option) == 2:
+                break
+
+        image_requests = user.remove_duplicates(image_requests)
 
         for index, i in enumerate(image_requests):
             i.append(index)
