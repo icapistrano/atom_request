@@ -63,12 +63,12 @@ def get_cache(img_format, img_res, client, user):
     else:
         start_time = time.time()
         global processing_time
-        found_image = False
+        global found_image
         for entry in entries:
             image = client.hgetall(entry)
             if image[b'format'].decode('utf-8') == img_format and image[b'resolution'].decode('utf-8') == str(img_res):
-                if processing_time:
-                    print("It took {} seconds to retrieve image[s] with matching parameters in cache".format(round(time.time() - start_time, 2)))
+                if processing_time: # execute block once
+                    print("It took {} seconds to retrieve image[s] with matching parameters in cache".format(round(time.time() - start_time, 3)))
                     processing_time=False
                     found_image=True
 
@@ -85,8 +85,11 @@ def get_db(img_format, img_res, client, user):
     url = 'https://www.masterofmalt.com/external_resources/dev_interview/product_images.zip'
 
     start_time=time.time()
-    r = requests.get(url, stream=True)
+
+    param = {'Watermark':True}
+    r = requests.get(url, stream=True, params=param)
     global processing_time
+    global found_image
     if r: # returns true/false, response 200 is good
         z = zipfile.ZipFile(BytesIO(r.content)) # r.content is binary data
         images = z.namelist()
@@ -95,8 +98,9 @@ def get_db(img_format, img_res, client, user):
                 image = Image.open(i) # PIL library for checking image dimension
                 if image.size == img_res:  # (788 x 1024)
                     if processing_time:
-                        print("It took {} seconds to retrieve image[s] with matching parameters in image library".format(round(time.time() - start_time, 2)))
+                        print("It took {} seconds to retrieve image[s] with matching parameters in image library".format(round(time.time() - start_time, 3)))
                         processing_time = False
+                        found_image = True
 
                     user.options(image, i)
 
@@ -109,11 +113,11 @@ def get_db(img_format, img_res, client, user):
                     entry = {"image": "{}".format(i), "format": "{}".format(img_format), "resolution": str(img_res), "binary": image}
                     client.hmset(i, entry)
                     client.expire(i, 300) # sets expiring time in seconds, 5 minutes
-
-            else:
-                print("No images found with matching parameters in image library")
     else:
         print("Invalid request to url")
+
+    if found_image == False:
+        print("No images found with matching parameters in image library")
 
 
 def main():
@@ -127,7 +131,7 @@ def main():
         get_cache(image_format,image_res,redis_client, user)
 
     except IndexError:
-        print("Out of range, enter values in this format: 'x , y'")
+        print("Out of range, enter values in this format: 'width_px , height_px'")
 
     except ValueError as e:
         print("{} not expected. Type correctly".format(e))
@@ -136,7 +140,7 @@ def main():
         print(e.message)
         get_db(image_format, image_res, redis_client, user)
 
-
 if __name__ == '__main__':
     processing_time = True
+    found_image = False
     main()
