@@ -171,7 +171,9 @@ def get_db(req, client, user):
 
 
 def main():
-    redis_client = redis.Redis(host='localhost', port=6379, db=0)  # initialize client
+    redis_client = redis.Redis(host='redis-12202.c59.eu-west-1-2.ec2.cloud.redislabs.com',
+                               port=12202,
+                               password = 'image_processing')  # initialize client
     image_requests = []
     user = User()
 
